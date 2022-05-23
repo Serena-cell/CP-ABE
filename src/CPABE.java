@@ -17,7 +17,7 @@ public class CPABE {
         Element g = bp.getG1().newRandomElement().getImmutable();
         Element alpha = bp.getZr().newRandomElement().getImmutable();
         Element beta = bp.getZr().newRandomElement().getImmutable();
-        Element h=bp.getGT().newRandomElement().getImmutable();
+        Element h=bp.getG1().newRandomElement().getImmutable();
 
         Element g_alpha = g.powZn(alpha).getImmutable();
         Element g_beta = g.powZn(beta).getImmutable();
@@ -146,29 +146,32 @@ public class CPABE {
         Pairing bp = PairingFactory.getPairing(pairingParametersFileName);
 
         Properties pkProp = loadPropFromFile(pkFileName);
-        Properties sk_aaProp = loadPropFromFile(sk_aaFileName);
+        Properties sk_aaProp = loadPropFromFile(sk_aaFileName)  ;
 
         //resolve information from pkFileName
         String gString = pkProp.getProperty("g");
         Element g = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(gString)).getImmutable();
         String hString = pkProp.getProperty("h");
-        Element h = bp.getGT().newElementFromBytes(Base64.getDecoder().decode(hString)).getImmutable();
+        Element h = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(hString)).getImmutable();
         String egg_alpha_betaString = pkProp.getProperty("egg_alpha_beta");
         Element egg_alpha_beta = bp.getGT().newElementFromBytes(Base64.getDecoder().decode(egg_alpha_betaString)).getImmutable();
 
         Properties ctProp = new Properties();
 
         Element s = bp.getZr().newRandomElement().getImmutable();
-//        //test
+//        //test s
 //        Properties skProp = loadPropFromFile(skFileName);
 //        String egg_alpha_thetaString = skProp.getProperty("D3");
 //        Element egg_alpha_theta = bp.getGT().newElementFromBytes(Base64.getDecoder().decode(egg_alpha_thetaString)).getImmutable();
 //        System.out.println("s in the recovered form:"+egg_alpha_theta.powZn(s)+"\n");
 
         Element omega = bp.getZr().newRandomElement().getImmutable();
+//        //test A
+//        System.out.println("A:"+egg_alpha_theta.powZn(omega)+"\n");
+
 
         //compute the ciphertext component C3
-        Element C3 = message.duplicate().mul(egg_alpha_beta.powZn(omega).getImmutable());
+        Element C3 = message.duplicate().mul(egg_alpha_beta.powZn(omega));
 
         Element C0 = g.powZn(omega).getImmutable();
         Element C1 = g.powZn(s).getImmutable();
@@ -195,19 +198,18 @@ public class CPABE {
                 //att in the accessTreeList must be a member of the authorityAttList
                 String D_aa_String = sk_aaProp.getProperty("D_aa_"+node.att);
                 Element D_aa_ = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(D_aa_String)).getImmutable();
-                Element C = D_aa_.powZn(node.secretShare);
-                ctProp.setProperty("C"+node.att, Base64.getEncoder().withoutPadding().encodeToString(C.toBytes()));
+                Element C_e = D_aa_.powZn(node.secretShare);
+                ctProp.setProperty("C_e"+node.att, Base64.getEncoder().withoutPadding().encodeToString(C_e.toBytes()));
             }
         }
         storePropToFile(ctProp, ctFileName);
     }
 
-    public static Element Decrypt(String pairingParametersFileName, Node[] accessTree, String ctFileName, String sk_aaFileName, String skFileName) {
+    public static Element Decrypt(String pairingParametersFileName, Node[] accessTree, String ctFileName, String skFileName) {
         Pairing bp = PairingFactory.getPairing(pairingParametersFileName);
 
         Properties ctProp = loadPropFromFile(ctFileName);
         Properties skProp = loadPropFromFile(skFileName);
-        Properties sk_aaProp = loadPropFromFile(sk_aaFileName);
 
         //resolve information from skprop
         String userAttListString = skProp.getProperty("userAttList");
@@ -228,6 +230,7 @@ public class CPABE {
         String C3String = ctProp.getProperty("C3");
         Element C3 = bp.getGT().newElementFromBytes(Base64.getDecoder().decode(C3String)).getImmutable();
 
+
         //resolve information from skprop
         String DString = skProp.getProperty("D");
         Element D = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(DString)).getImmutable();
@@ -235,8 +238,6 @@ public class CPABE {
         Element D1 = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(D1String)).getImmutable();
         String D2String = skProp.getProperty("D2");
         Element D2 = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(D2String)).getImmutable();
-//        String D3String = skProp.getProperty("D3");
-//        Element D3 = bp.getGT().newElementFromBytes(Base64.getDecoder().decode(D3String)).getImmutable();
 
 
         for (Node node : accessTree) {
@@ -246,12 +247,12 @@ public class CPABE {
                     //that come to the secretShare:
 //                    String D_aa_String = sk_aaProp.getProperty("D_aa_"+node.att);
 //                    Element D_aa_ = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(D_aa_String)).getImmutable();
-                    String CString = ctProp.getProperty("C"+node.att);
-                    Element C = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(CString)).getImmutable();
+                    String C_eString = ctProp.getProperty("C_e"+node.att);
+                    Element C_e = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(C_eString)).getImmutable();
                     String D_usrString = skProp.getProperty("D_usr"+node.att);
                     Element D_usr = bp.getG1().newElementFromBytes(Base64.getDecoder().decode(D_usrString)).getImmutable();
 
-                    node.secretShare = bp.pairing(D_usr,C);
+                    node.secretShare = bp.pairing(D_usr,C_e);
                 }
             }
         }
@@ -259,10 +260,13 @@ public class CPABE {
         // s is recovered in the form of egg_alpha_theta_s
         boolean treeOK = nodeRecover(accessTree, accessTree[0], userAttList, bp);
         if (treeOK) {
+            //test s
             //System.out.println("recovered s:"+accessTree[0].secretShare+"\n");
             System.out.println("The access tree is satisfied.");
-            Element A = bp.pairing(D1,C1_0).div((accessTree[0].secretShare).mul(bp.pairing(D2,C2_0)));
-            Element m=C3.mul(A).div(bp.pairing(D,C0));
+            Element A = bp.pairing(D1,C1_0).div((accessTree[0].secretShare).mul(bp.pairing(D2,C2_0))).getImmutable();
+//            //test A
+//            System.out.println("recovered A:"+A);
+            Element m = (C3.mul(A)).div(bp.pairing(D,C0)).getImmutable();
             return m;
         }
         else {
@@ -503,6 +507,7 @@ public class CPABE {
 
         //automatically go to root dir to find files
         String dir = "data/";
+        //"a.properties" is the official document provided by jpbc developers for symmetric bilinear mapping
         String pairingParametersFileName = "a.properties";
         String pkFileName = dir + "pk.properties";
         String mkFileName = dir + "mk.properties";
@@ -522,7 +527,7 @@ public class CPABE {
         System.out.println("密钥生成用时：" + (endtime-starttime)+"ms\n");
 
         Element message = PairingFactory.getPairing(pairingParametersFileName).getGT().newRandomElement().getImmutable();
-        //System.out.println("明文消息:" + message);
+        System.out.println("明文消息:" + message);
 
         starttime=System.currentTimeMillis();
         encrypt(pairingParametersFileName, message, accessTree, pkFileName, sk_aaFileName, ctFileName);
@@ -530,11 +535,11 @@ public class CPABE {
         System.out.println("加密用时：" + (endtime-starttime)+"ms\n");
 
         starttime=System.currentTimeMillis();
-        Element res = Decrypt(pairingParametersFileName, accessTree, ctFileName, sk_aaFileName, skFileName);
+        Element res = Decrypt(pairingParametersFileName, accessTree, ctFileName, skFileName);
         endtime=System.currentTimeMillis();
         System.out.println("解密用时：" + (endtime-starttime)+"ms\n");
 
-        //System.out.println("解密结果:" + res);
+        System.out.println("解密结果:" + res);
 
         if (message.isEqual(res)) {
             System.out.println("成功解密！");
